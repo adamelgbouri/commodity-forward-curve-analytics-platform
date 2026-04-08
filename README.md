@@ -70,7 +70,7 @@ python cfcap.py --list
 |--------|------------|-------|
 | Yahoo Finance | WTI, Brent, NG, Gold, Silver, Copper, Grains, Softs... | Free, no credentials |
 | TradingView | Jet CIF NWE, LME metals, TTF, Coal, Carbon, Freight... | Optional credentials |
-| EIA Open Data | US crude/gas inventories, production, spot | Free API key at [`eia.gov/opendata`](eia.gov/opendata) |
+| EIA Open Data | US crude/gas inventories, production, spot | Free API key at [`eia.gov/opendata`](https://eia.gov/opendata) |
 
 ---
 
