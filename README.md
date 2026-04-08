@@ -90,7 +90,9 @@ cfcap/
 ├── LICENSE
 ├── config.yaml.example      # Configuration template (copy to config.yaml)
 └── docs/
-    └── dashboard_example.png
+    ├── Commodity_Forward_Curve_Analytics_Platform.pdf
+    └── Commodity_Forward_Curve_Analytics_Platform.tex
+
 ```
 
 Data is generated automatically at runtime and excluded from version control:
