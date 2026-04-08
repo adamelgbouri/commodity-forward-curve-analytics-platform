@@ -95,7 +95,7 @@ cfcap/
 ## Commodities Covered
 
 | Family | Examples |
-|---|---|---|
+|---|---|
 | Energy | WTI, Brent, Natural Gas, RBOB, Heating Oil, Gasoil, Jet CIF NWE |
 | Metals | Gold, Silver, Copper, Platinum, Palladium |
 | Agriculture | Corn, Wheat, Soybeans, Sugar, Coffee, Cocoa, Cotton, Soybean Oil/Meal, Oats, OJ, Live Cattle, Lean Hogs, Lumber, Palm Oil |
