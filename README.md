@@ -7,6 +7,8 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.32%2B-red?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
+![Dashboard example](docs/wti_crude_oil_20260408_192720.png)
+
 ---
 
 ## Features
@@ -145,7 +147,31 @@ data/                        # auto-created, gitignored
 - **Summary** — STRONG BUY/SELL when 3+ signals aligned
 
 ---
+## Theory
 
+The forward curve analytics are based on the **Nelson-Siegel (1987)** parametric model:
+
+$$F(T) = \beta_0 + \beta_1 \cdot \frac{1 - e^{-T/\tau}}{T/\tau} + \beta_2 \cdot \left[\frac{1 - e^{-T/\tau}}{T/\tau} - e^{-T/\tau}\right]$$
+
+Where:
+- $\beta_0$ — long-term level (fair value as $T \to \infty$)
+- $\beta_1$ — slope (short-term component, $\beta_0 + \beta_1$ = spot level)
+- $\beta_2$ — curvature (medium-term hump or valley)
+- $\tau$ — decay parameter (speed of mean-reversion)
+
+The **implied convenience yield** is derived from the cost-of-carry model:
+
+$$cy(T) = r + u - \frac{1}{T} \ln\left(\frac{F(T)}{S}\right)$$
+
+Where $r$ is the risk-free rate, $u$ the storage cost, $S$ the spot price and $F(T)$ the $T$-maturity futures price.
+
+The **roll yield** measures the annualised return from rolling a long futures position:
+
+$$ry(T) = \frac{S - F(T)}{F(T) \cdot T}$$
+
+See [`docs/Commodity_Forward_Curve_Analytics_Platform.pdf`](docs/Commodity_Forward_Curve_Analytics_Platform.pdf) for the full mathematical write-up.
+
+---
 ## License
 
 MIT — © 2026 Adam El Gbouri
