@@ -77,17 +77,24 @@ python cfcap.py --list
 ## Project Structure
 
 ```
-commodity-forward-curve-analytics-platform/
-├── cfcap.py              # Main application (single-file)
-├── requirements.txt      # Python dependencies
-├── config.yaml.example   # Configuration template
-├── .gitignore
+cfcap/
+├── cfcap.py                 # Main application (single-file)
+├── requirements.txt
 ├── README.md
-└── data/                 # Auto-created at runtime (gitignored)
-    ├── curves/           # Daily CSV snapshots
-    ├── dashboards/       # PNG exports
-    ├── eia_cache/        # EIA API cache (24h TTL)
-    └── logs/             # Scheduler logs
+├── .gitignore
+├── LICENSE
+├── config.yaml.example      # Configuration template (copy to config.yaml)
+└── docs/
+    └── dashboard_example.png
+```
+
+Data is generated automatically at runtime and excluded from version control:
+```
+data/                        # auto-created, gitignored
+├── curves/<commodity>/      # daily CSV snapshots
+├── dashboards/<commodity>/  # PNG exports
+├── eia_cache/               # EIA API cache (24h TTL)
+└── logs/                    # scheduler logs
 ```
 
 ---
