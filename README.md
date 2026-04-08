@@ -94,15 +94,16 @@ cfcap/
 
 ## Commodities Covered
 
-| Family | Examples |
-|---|---|
-| Energy | WTI, Brent, Natural Gas, RBOB, Heating Oil, Gasoil, Jet CIF NWE |
-| Metals | Gold, Silver, Copper, Platinum, Palladium |
-| Agriculture | Corn, Wheat, Soybeans, Sugar, Coffee, Cocoa, Cotton, Soybean Oil/Meal, Oats, OJ, Live Cattle, Lean Hogs, Lumber, Palm Oil |
-| Base Metals (LME) | Copper, Aluminum, Zinc, Nickel, Lead, Tin, Cobalt |
-| Energy (Additional) | TTF, NBP, Coal API2/API4, Uranium, Carbon EUA |
-| Freight | Capesize, Panamax, Supramax, VLCC |
-| Carbon | EU EUA, UK UKA, California CCA, RGGI |
+| Family | Commodities | Source |
+|---|---|---|
+| Energy | WTI, Brent, Natural Gas, RBOB, Heating Oil, Gasoil | Yahoo Finance |
+| Energy+ | Jet CIF NWE, TTF, NBP, Coal API2/API4, Uranium | TradingView |
+| Metals | Gold, Silver, Copper, Platinum, Palladium | Yahoo Finance |
+| Base Metals | LME Copper, Aluminum, Zinc, Nickel, Lead, Tin, Cobalt | TradingView |
+| Agriculture | Corn, Wheat, Soybeans, Sugar, Coffee, Cocoa, Cotton | Yahoo Finance |
+| Agriculture+ | Soybean Oil/Meal, Oats, OJ, Cattle, Hogs, Lumber, Palm Oil | Yahoo Finance / TradingView |
+| Freight | Capesize, Panamax, Supramax, VLCC | TradingView |
+| Carbon | EU EUA, UK UKA, California CCA, RGGI | TradingView |
 
 ---
 
