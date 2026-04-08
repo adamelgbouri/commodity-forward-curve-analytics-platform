@@ -1,5 +1,5 @@
 """
-CFCAP — Commodity Forward Curve Analytics Platform
+CFCAP — Commodity Forward Curve Analytics Platform by AEG
 ====================================================
 Complete single-file application combining:
   1. Core engine     : forward curve download, Nelson-Siegel, convenience yield,
@@ -3287,8 +3287,8 @@ def run_streamlit_app() -> None:
                 f'<span style="font-size:0.82rem;font-weight:500;color:#E6EDF3;line-height:1.3">'
                 f'{_s["title"]}</span></div>'
                 f'<div style="font-family:JetBrains Mono,monospace;font-size:0.71rem;'
-                f'color:{_tc};margin-bottom:5px;white-space:nowrap;overflow:hidden;'
-                f'text-overflow:ellipsis">{_s["detail"]}</div>'
+                f'color:{_tc};margin-bottom:5px;word-break:break-word;'
+                f'white-space:normal">{_s["detail"]}</div>'
                 f'<div style="font-size:0.70rem;color:#8B949E;line-height:1.55">'
                 f'{_s["rationale"]}</div></div>'
             )
