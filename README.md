@@ -27,7 +27,7 @@
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/YOUR_USERNAME/cfcap.git
+git clone https://github.com/adamelgbouri/commodity-forward-curve-analytics-platform.git
 cd cfcap
 
 # 2. Install dependencies
@@ -72,6 +72,23 @@ cfcap/
     ├── eia_cache/        # EIA API cache (24h TTL)
     └── logs/             # Scheduler logs
 ```
+
+---
+
+## Dependencies
+ 
+| Library | Purpose |
+|---|---|
+| `numpy` | Numerical computations, Nelson-Siegel fitting |
+| `pandas` | DataFrames, CSV persistence, historical data |
+| `scipy` | Curve fitting (`curve_fit`), spline interpolation |
+| `matplotlib` | 4-panel PNG dashboard |
+| `requests` | EIA API calls |
+| `yfinance` | Live futures data (Yahoo Finance) |
+| `streamlit` | Interactive browser dashboard |
+| `plotly` | Interactive charts in Streamlit |
+| `schedule` | Daily scheduler automation |
+| `tkinter` | Desktop selection dialog (built-in) |
 
 ---
 
