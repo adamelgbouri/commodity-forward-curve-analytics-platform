@@ -26,14 +26,14 @@
 ## Installation
 
 ```bash
-git clone https://github.com/your-username/cfcap.git
+git clone https://github.com/adamelgbouri/commodity-forward-curve-analytics-platform.git
 cd cfcap
 pip install -r requirements.txt
 ```
 
-For TradingView-sourced contracts (Jet Kerosene, LME metals, TTF Gas, Carbon...):
+For TradingView-sourced contracts (Jet CIF NWE, LME metals, TTF Gas, Carbon...):
 ```bash
-pip install git+https://github.com/StreamAlpha/tvdatafeed.git
+pip install tradingview-datafeed
 ```
 
 ---
