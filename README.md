@@ -77,7 +77,7 @@ python cfcap.py --list
 ## Project Structure
 
 ```
-cfcap/
+commodity-forward-curve-analytics-platform/
 ├── cfcap.py              # Main application (single-file)
 ├── requirements.txt      # Python dependencies
 ├── config.yaml.example   # Configuration template
