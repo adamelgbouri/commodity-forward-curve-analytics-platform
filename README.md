@@ -45,6 +45,11 @@ python cfcap.py --commodity "WTI Crude Oil" --family "Energy"
 python cfcap.py --list                   # list saved CSV snapshots
 ```
 
+1. Select an asset class and commodity in the dialog
+2. Set the risk-free rate and number of months forward
+3. Click **RUN ANALYSIS**
+4. The dashboard is saved in `data/dashboards/<commodity>/`
+
 ---
 
 ## Data Sources
