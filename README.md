@@ -9,6 +9,7 @@
 
 ![CFCAP Screenshot 1](docs/Streamlit_Screenshot_CFCAP_1.png)
 ![CFCAP Screenshot 2](docs/Streamlit_Screenshot_CFCAP_2.png)
+
 ![Dashboard example](docs/wti_crude_oil_20260408_192720.png)
 
 ---
