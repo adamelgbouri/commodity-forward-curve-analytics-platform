@@ -1,4 +1,4 @@
-# CFCAP — Commodity Forward Curve Analytics Platform
+# CFCAP — Commodity Forward Curve Analytics Platform ™ by AEG
 
 > A professional-grade commodity forward curve analyzer built in Python.  
 > Covers 65+ commodities across 8 asset classes with live data, quantitative analytics, and an interactive Streamlit dashboard.
