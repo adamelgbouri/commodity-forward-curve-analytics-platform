@@ -23,26 +23,38 @@
 
 ---
 
-## Quick Start
+## Installation
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/adamelgbouri/commodity-forward-curve-analytics-platform.git
+git clone https://github.com/your-username/cfcap.git
 cd cfcap
-
-# 2. Install dependencies
 pip install -r requirements.txt
+```
 
-# 3. (Optional) Configure credentials
-cp config.yaml.example config.yaml
-# Edit config.yaml with your EIA key and TradingView credentials
+For TradingView-sourced contracts (Jet Kerosene, LME metals, TTF Gas, Carbon...):
+```bash
+pip install git+https://github.com/StreamAlpha/tvdatafeed.git
+```
 
-# 4. Run — choose your mode
-python cfcap.py                          # tkinter dialog + matplotlib dashboard
-streamlit run cfcap.py                   # interactive browser dashboard
-python cfcap.py --schedule               # daily scheduler at 09:15 EST
-python cfcap.py --commodity "WTI Crude Oil" --family "Energy"
-python cfcap.py --list                   # list saved CSV snapshots
+---
+
+## Usage
+
+```bash
+# Interactive dialog + matplotlib dashboard (PNG export)
+python cfcap.py
+
+# Interactive browser dashboard (Streamlit)
+streamlit run cfcap.py
+
+# Single commodity via CLI
+python cfcap.py --commodity "WTI Crude Oil" --family "Energy" --rf 4.25
+
+# Daily scheduler — runs automatically at 09:15 EST
+python cfcap.py --schedule
+
+# List saved historical snapshots
+python cfcap.py --list
 ```
 
 1. Select an asset class and commodity in the dialog
@@ -57,8 +69,8 @@ python cfcap.py --list                   # list saved CSV snapshots
 | Source | Commodities | Notes |
 |--------|------------|-------|
 | Yahoo Finance | WTI, Brent, NG, Gold, Silver, Copper, Grains, Softs... | Free, no credentials |
-| TradingView | Jet Kero, LME metals, TTF, Coal, Carbon, Freight... | Optional credentials |
-| EIA Open Data | US crude/gas inventories, production, spot | Free API key at eia.gov |
+| TradingView | Jet CIF NWE, LME metals, TTF, Coal, Carbon, Freight... | Optional credentials |
+| EIA Open Data | US crude/gas inventories, production, spot | Free API key at eia.gov/opendata/ |
 
 ---
 
