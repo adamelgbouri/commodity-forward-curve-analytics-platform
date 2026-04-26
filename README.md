@@ -3,7 +3,7 @@
 > A professional-grade commodity forward curve analyzer built in Python.  
 > Covers 65+ commodities across 8 asset classes with live data, quantitative analytics, and an interactive Streamlit dashboard.
 
-[`cfcap-aeg.streamlit.app`](https://cfcap-aeg.streamlit.app/)
+[`aeg-cfcap.streamlit.app`](https://aeg-cfcap.streamlit.app/)
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.32%2B-red?style=flat-square)
