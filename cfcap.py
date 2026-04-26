@@ -1,5 +1,5 @@
 """
-CFCAP — Commodity Forward Curve Analytics Platform by AEG
+CFCAP — Commodity Forward Curve Analytics Platform
 ====================================================
 Complete single-file application combining:
   1. Core engine     : forward curve download, Nelson-Siegel, convenience yield,
@@ -10,14 +10,13 @@ Complete single-file application combining:
   5. Streamlit UI    : interactive browser dashboard with Plotly charts
 
 Run modes:
-  python  cfcap.py                              # tkinter dialog → matplotlib dashboard
   python  cfcap.py --schedule                   # daily scheduler (keeps process alive)
   python  cfcap.py --commodity "WTI Crude Oil" --family "Energy"
   python  cfcap.py --list                       # list saved CSV snapshots
   streamlit run cfcap.py                        # browser dashboard (Streamlit)
 
 Install:
-  pip install yfinance pandas numpy scipy matplotlib streamlit plotly requests schedule
+  pip install yfinance pandas numpy scipy scikit-learn matplotlib streamlit plotly requests schedule
   pip install git+https://github.com/StreamAlpha/tvdatafeed.git  # for TV-only contracts
 
 Free EIA API key: https://www.eia.gov/opendata/  (30 seconds to register)
@@ -44,10 +43,9 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
 from scipy.interpolate import CubicSpline
+from scipy.optimize import least_squares
 
 import requests
-import tkinter as tk
-from tkinter import ttk, messagebox
 
 warnings.filterwarnings("ignore")
 
@@ -601,512 +599,6 @@ COMMODITY_REGISTRY = {
 #  PART 1 — SELECTION DIALOG
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_selector() -> dict:
-    """
-    Premium tkinter dialog: family → commodity → parameters → run.
-    Returns config dict or exits if cancelled.
-    """
-    result = {}
-
-    root = tk.Tk()
-    root.title("Commodity Forward Curve Analyzer  ™ by AEG")
-    root.geometry("700x660")
-    root.resizable(False, False)
-    root.configure(bg="#0D1117")
-
-    # ── Palette ───────────────────────────────────────────────────────────
-    BG       = "#0D1117"
-    PANEL    = "#161B22"
-    PANEL2   = "#1C2128"
-    BORDER   = "#30363D"
-    BORDER2  = "#21262D"
-    TEXT     = "#E6EDF3"
-    MUTED    = "#8B949E"
-    ACCENT   = "#58A6FF"
-    AMBER    = "#F0A500"
-    GREEN    = "#238636"
-    GREEN2   = "#2EA043"
-    RED      = "#DA3633"
-    PURPLE   = "#BC8CFF"
-
-    FONT      = ("Consolas", 10)
-    FONT_B    = ("Consolas", 10, "bold")
-    FONT_SM   = ("Consolas", 9)
-    FONT_XS   = ("Consolas", 8)
-    FONT_T    = ("Consolas", 15, "bold")
-    FONT_TM   = ("Consolas", 9, "italic")
-
-    # ── Helpers ───────────────────────────────────────────────────────────
-    def lbl(parent, text, fg=MUTED, font=FONT_SM, bg=BG, **kw):
-        return tk.Label(parent, text=text, bg=bg, fg=fg, font=font, **kw)
-
-    def sep_line(parent):
-        tk.Frame(parent, bg=BORDER, height=1).pack(fill="x", padx=20, pady=(0, 12))
-
-    def section_header(parent, num, title):
-        f = tk.Frame(parent, bg=BG)
-        f.pack(fill="x", padx=20, pady=(10, 6))
-        tk.Label(f, text=f" {num} ", bg=ACCENT, fg=BG,
-                 font=("Consolas", 9, "bold"),
-                 padx=5, pady=1).pack(side="left")
-        tk.Label(f, text=f"  {title}", bg=BG, fg=TEXT,
-                 font=FONT_B).pack(side="left")
-
-    def mk_entry(parent, default="", width=10, show=None):
-        kw = dict(bg=PANEL2, fg=TEXT, insertbackground=ACCENT,
-                  font=FONT, relief="flat", bd=0,
-                  highlightthickness=1, highlightbackground=BORDER,
-                  highlightcolor=ACCENT, width=width)
-        if show:
-            kw["show"] = show
-        e = tk.Entry(parent, **kw)
-        e.insert(0, default)
-        return e
-
-    # ── Header ────────────────────────────────────────────────────────────
-    header = tk.Frame(root, bg=PANEL, pady=0)
-    header.pack(fill="x")
-
-    # left accent bar
-    tk.Frame(header, bg=ACCENT, width=4).pack(side="left", fill="y")
-
-    title_block = tk.Frame(header, bg=PANEL, padx=18, pady=14)
-    title_block.pack(side="left", fill="both", expand=True)
-
-    title_row = tk.Frame(title_block, bg=PANEL)
-    title_row.pack(anchor="w")
-    tk.Label(title_row, text="FORWARD CURVE ANALYZER",
-             bg=PANEL, fg=TEXT, font=FONT_T).pack(side="left")
-    tk.Label(title_row, text="  ™ by AEG",
-             bg=PANEL, fg=MUTED, font=FONT_TM).pack(side="left", pady=(4, 0))
-
-    tk.Label(title_block,
-             text="Multi-commodity forward curve analysis  |  Hedging & Trading toolkit",
-             bg=PANEL, fg=MUTED, font=FONT_SM).pack(anchor="w", pady=(3, 0))
-
-    # right: live clock
-    clock_lbl = tk.Label(header, bg=PANEL, fg=MUTED, font=FONT_SM, padx=18)
-    clock_lbl.pack(side="right", anchor="e")
-
-    def tick():
-        clock_lbl.config(text=datetime.now().strftime("%d %b %Y   %H:%M:%S"))
-        root.after(1000, tick)
-    tick()
-
-    tk.Frame(root, bg=BORDER, height=1).pack(fill="x")
-
-    # ── Scrollable body ───────────────────────────────────────────────────
-    body = tk.Frame(root, bg=BG)
-    body.pack(fill="both", expand=True)
-
-    # ── Section 1: Asset class ────────────────────────────────────────────
-    section_header(body, "1", "ASSET CLASS")
-
-    families   = list(COMMODITY_REGISTRY.keys())
-    family_var = tk.StringVar(value=families[0])
-
-    fam_frame = tk.Frame(body, bg=BG)
-    fam_frame.pack(fill="x", padx=20, pady=(0, 2))
-
-    FAMILY_COLORS = {"Energy": AMBER, "Metals": "#C0C0C0", "Agriculture": GREEN2}
-
-    radio_btns = {}
-    for fam in families:
-        col = FAMILY_COLORS.get(fam, ACCENT)
-        rb = tk.Radiobutton(
-            fam_frame, text=f"  {fam}  ",
-            variable=family_var, value=fam,
-            bg=PANEL2, fg=col,
-            selectcolor=PANEL, activebackground=PANEL2, activeforeground=col,
-            font=FONT_B, relief="flat", bd=0,
-            indicatoron=0,
-            padx=12, pady=6,
-            highlightthickness=1,
-            highlightbackground=BORDER,
-            command=lambda: update_commodities(),
-        )
-        rb.pack(side="left", padx=(0, 8))
-        radio_btns[fam] = rb
-
-    sep_line(body)
-
-    # ── Section 2: Commodity ──────────────────────────────────────────────
-    section_header(body, "2", "COMMODITY")
-
-    cb_frame = tk.Frame(body, bg=BG)
-    cb_frame.pack(fill="x", padx=20, pady=(0, 6))
-
-    commodity_var = tk.StringVar()
-
-    style = ttk.Style()
-    style.theme_use("clam")
-    style.configure("Dark.TCombobox",
-                    fieldbackground=PANEL2, background=PANEL2,
-                    foreground=TEXT, arrowcolor=ACCENT,
-                    selectbackground=PANEL2, selectforeground=TEXT,
-                    bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER)
-    style.map("Dark.TCombobox",
-              fieldbackground=[("readonly", PANEL2)],
-              background=[("readonly", PANEL2)],
-              foreground=[("readonly", TEXT)])
-
-    commodity_cb = ttk.Combobox(cb_frame, textvariable=commodity_var,
-                                 state="readonly", font=FONT, width=46,
-                                 style="Dark.TCombobox")
-    commodity_cb.pack(side="left")
-
-    # Info badge row
-    info_frame = tk.Frame(body, bg=BG)
-    info_frame.pack(fill="x", padx=20, pady=(4, 4))
-
-    source_badge = tk.Label(info_frame, text="", bg=BG, fg=GREEN2, font=FONT_XS,
-                             padx=8, pady=3, relief="flat")
-    source_badge.pack(side="left", padx=(0, 8))
-
-    unit_badge = tk.Label(info_frame, text="", bg=PANEL2, fg=MUTED, font=FONT_XS,
-                           padx=8, pady=3,
-                           highlightthickness=1, highlightbackground=BORDER)
-    unit_badge.pack(side="left", padx=(0, 8))
-
-    horizon_badge = tk.Label(info_frame, text="", bg=PANEL2, fg=PURPLE, font=FONT_XS,
-                              padx=8, pady=3,
-                              highlightthickness=1, highlightbackground=BORDER)
-    horizon_badge.pack(side="left")
-
-    def update_source(*_):
-        fam  = family_var.get()
-        name = commodity_var.get()
-        if not name:
-            return
-        cfg  = COMMODITY_REGISTRY[fam][name]
-        src  = cfg["source"]
-        unit = cfg["unit"]
-        if src == "yahoo":
-            source_badge.config(text=" Yahoo Finance ", bg="#0D3015",
-                                 fg=GREEN2,
-                                 highlightthickness=1, highlightbackground="#2EA043")
-        else:
-            source_badge.config(text=f" TradingView / {cfg['tv_exchange']} ",
-                                 bg="#2D1F00", fg=AMBER,
-                                 highlightthickness=1, highlightbackground=AMBER)
-        unit_badge.config(text=f" {unit} ")
-        horizon_badge.config(text=f" {cfg['liquid_months']}M horizon ")
-
-    def update_commodities(*_):
-        fam  = family_var.get()
-        opts = list(COMMODITY_REGISTRY[fam].keys())
-        commodity_cb["values"] = opts
-        commodity_cb.current(0)
-        update_source()
-
-    commodity_cb.bind("<<ComboboxSelected>>", update_source)
-    update_commodities()
-
-    sep_line(body)
-
-    # ── Section 3: Parameters ─────────────────────────────────────────────
-    section_header(body, "3", "PARAMETERS")
-
-    params_outer = tk.Frame(body, bg=BG)
-    params_outer.pack(fill="x", padx=20, pady=(0, 6))
-
-    # Row 1: RF rate + months
-    row1 = tk.Frame(params_outer, bg=BG)
-    row1.pack(fill="x", pady=(0, 8))
-
-    # RF rate card
-    rf_card = tk.Frame(row1, bg=PANEL2,
-                        highlightthickness=1, highlightbackground=BORDER)
-    rf_card.pack(side="left", padx=(0, 12), ipadx=12, ipady=8)
-    lbl(rf_card, "RISK-FREE RATE  (%)", fg=MUTED, font=FONT_XS,
-        bg=PANEL2).pack(anchor="w", padx=8, pady=(6, 2))
-    rf_entry = mk_entry(rf_card, "5.0", width=10)
-    rf_entry.pack(padx=8, pady=(0, 6))
-
-    # Months card
-    nm_card = tk.Frame(row1, bg=PANEL2,
-                        highlightthickness=1, highlightbackground=BORDER)
-    nm_card.pack(side="left", padx=(0, 12), ipadx=12, ipady=8)
-    lbl(nm_card, "MONTHS FORWARD", fg=MUTED, font=FONT_XS,
-        bg=PANEL2).pack(anchor="w", padx=8, pady=(6, 2))
-    nm_entry = mk_entry(nm_card, "", width=10)
-    nm_entry.pack(padx=8, pady=(0, 6))
-    lbl(nm_card, "blank = commodity default", fg=BORDER, font=FONT_XS,
-        bg=PANEL2).pack(padx=8, pady=(0, 4))
-
-    sep_line(body)
-
-    # ── Section 4: TradingView credentials ────────────────────────────────
-    section_header(body, "4", "TRADINGVIEW CREDENTIALS  (optional)")
-
-    tv_outer = tk.Frame(body, bg=PANEL2,
-                         highlightthickness=1, highlightbackground=BORDER)
-    tv_outer.pack(fill="x", padx=20, pady=(0, 4))
-
-    tv_row = tk.Frame(tv_outer, bg=PANEL2)
-    tv_row.pack(fill="x", padx=12, pady=10)
-
-    lbl(tv_row, "Username", fg=MUTED, font=FONT_XS,
-        bg=PANEL2).grid(row=0, column=0, sticky="w", padx=(0, 8))
-    tv_user = mk_entry(tv_row, TV_USERNAME, width=24)
-    tv_user.grid(row=1, column=0, padx=(0, 20), pady=(2, 0))
-
-    lbl(tv_row, "Password", fg=MUTED, font=FONT_XS,
-        bg=PANEL2).grid(row=0, column=1, sticky="w")
-    tv_pass = mk_entry(tv_row, TV_PASSWORD, width=24, show="*")
-    tv_pass.grid(row=1, column=1, pady=(2, 0))
-
-    lbl(tv_outer,
-        "  Leave empty for anonymous session — sufficient for most NYMEX contracts.",
-        fg=BORDER, font=FONT_XS, bg=PANEL2).pack(anchor="w", padx=12, pady=(0, 8))
-
-    # ── Footer: status + run button ───────────────────────────────────────
-    tk.Frame(root, bg=BORDER, height=1).pack(fill="x")
-
-    footer = tk.Frame(root, bg=PANEL, pady=0)
-    footer.pack(fill="x", side="bottom")
-
-    tk.Frame(footer, bg=ACCENT, width=4).pack(side="left", fill="y")
-
-    footer_inner = tk.Frame(footer, bg=PANEL, padx=16, pady=12)
-    footer_inner.pack(side="left", fill="both", expand=True)
-
-    status_var = tk.StringVar(value="")
-    tk.Label(footer_inner, textvariable=status_var, bg=PANEL, fg=GREEN2,
-             font=FONT_SM).pack(anchor="w", pady=(0, 6))
-
-    def confirm():
-        fam  = family_var.get()
-        name = commodity_var.get()
-        if not name:
-            messagebox.showerror("Error", "Please select a commodity.")
-            return
-        try:
-            rf = float(rf_entry.get().strip()) / 100
-        except ValueError:
-            messagebox.showerror("Error", "Risk-free rate must be a number (e.g. 5.0).")
-            return
-
-        cfg = COMMODITY_REGISTRY[fam][name].copy()
-        nm_raw = nm_entry.get().strip()
-        if nm_raw:
-            try:
-                cfg["liquid_months"] = int(nm_raw)
-            except ValueError:
-                messagebox.showerror("Error", "Months forward must be an integer.")
-                return
-
-        result["cfg"]        = cfg
-        result["rf"]         = rf
-        result["tv_user"]    = tv_user.get().strip()
-        result["tv_pass"]    = tv_pass.get().strip()
-        status_var.set(f"  Launching  {name}  ...")
-        root.after(350, root.destroy)
-
-    run_btn = tk.Button(
-        footer_inner, text="  RUN ANALYSIS  \u25b6",
-        bg=ACCENT, fg=BG, font=("Consolas", 12, "bold"),
-        relief="flat", padx=20, pady=8, cursor="hand2", bd=0,
-        activebackground="#79B8FF", activeforeground=BG,
-        command=confirm,
-    )
-    run_btn.pack(anchor="w")
-
-    lbl(footer, "™ by AEG", fg=BORDER, font=FONT_TM,
-        bg=PANEL).pack(side="right", padx=18, anchor="e")
-
-    # Bring window to front — required in Spyder/IPython environments
-    root.lift()
-    root.attributes("-topmost", True)
-    root.after(100, lambda: root.attributes("-topmost", False))
-    root.focus_force()
-    root.mainloop()
-
-    if not result:
-        print("Cancelled.")
-        sys.exit(0)
-
-    return result
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  PART 2 — TICKER BUILDER
-# ══════════════════════════════════════════════════════════════════════════════
-
-def build_tickers(cfg: dict) -> list[dict]:
-    """
-    Generate contract metadata for the next n months,
-    restricted to the commodity's active month codes.
-    """
-    now       = datetime.now()
-    n         = cfg["liquid_months"]
-    active    = cfg["active_months"]
-    contracts = []
-
-    month_offset = 0
-    while len(contracts) < n:
-        m    = (now.month - 1 + month_offset) % 12
-        year = now.year + (now.month - 1 + month_offset) // 12
-        month_offset += 1
-
-        if MONTH_CODES[m] not in active:
-            continue
-
-        yr2 = str(year)[-2:]
-        if cfg["source"] == "yahoo":
-            ticker = cfg["yf_fmt"].replace("{M}", MONTH_CODES[m]).replace("{YY}", yr2)
-        else:
-            ticker = f"{cfg['tv_prefix']}{MONTH_CODES[m]}{year}"
-
-        contracts.append({
-            "ticker":        ticker,
-            "label":         f"{MONTH_NAMES[m]}-{year}",
-            "month_code":    MONTH_CODES[m],
-            "maturity":      datetime(year, m + 1, 20),
-            "months_to_mat": len(contracts) + 1,
-        })
-
-    return contracts
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  PART 3 — DATA DOWNLOAD
-# ══════════════════════════════════════════════════════════════════════════════
-
-def get_forward_curve(cfg: dict, rf: float,
-                      tv_user: str = "", tv_pass: str = "") -> pd.DataFrame:
-    """Route download to Yahoo Finance or TradingView based on cfg['source']."""
-    if cfg["source"] == "yahoo":
-        return _download_yahoo(cfg)
-    else:
-        return _download_tradingview(cfg, tv_user, tv_pass)
-
-
-def _download_yahoo(cfg: dict) -> pd.DataFrame:
-    """Single grouped yf.download() — avoids rate limiting."""
-    try:
-        import yfinance as yf
-    except ImportError:
-        print("  yfinance not installed -- pip install yfinance")
-        return _synthetic_curve(cfg)
-
-    contracts = build_tickers(cfg)
-    tickers   = [c["ticker"] for c in contracts]
-    n         = len(tickers)
-
-    print(f"\n1. Downloading {n} contracts from Yahoo Finance...")
-    print(f"   {tickers[0]}  ->  {tickers[-1]}")
-    time.sleep(3)
-
-    raw = yf.download(tickers, period="5d", auto_adjust=True, progress=False)
-
-    if raw.empty:
-        print("   No data received -- switching to synthetic curve.")
-        return _synthetic_curve(cfg)
-
-    closes = (raw["Close"] if isinstance(raw.columns, pd.MultiIndex)
-              else raw[["Close"]]).iloc[-1]
-
-    results, missing = [], []
-    for c in contracts:
-        t = c["ticker"]
-        if t in closes.index and pd.notna(closes[t]):
-            results.append({**c, "price": round(float(closes[t]), 2)})
-            print(f"   {t:<16} {c['label']:<12}  {closes[t]:.2f} {cfg['unit']}")
-        else:
-            missing.append(t)
-
-    print(f"\n   {len(results)}/{n} contracts loaded"
-          + (f"  |  missing: {', '.join(missing)}" if missing else ""))
-
-    if len(results) < 2:
-        print("   Insufficient data -- switching to synthetic curve.")
-        return _synthetic_curve(cfg)
-
-    return _to_df(results, cfg)
-
-
-def _download_tradingview(cfg: dict, tv_user: str, tv_pass: str) -> pd.DataFrame:
-    """Per-contract tv.get_hist() with 1s sleep between calls."""
-    try:
-        from tvdatafeed import TvDatafeed, Interval
-    except ImportError:
-        print("  tvdatafeed not installed.")
-        print("  Run: pip install git+https://github.com/StreamAlpha/tvdatafeed.git")
-        return _synthetic_curve(cfg)
-
-    contracts = build_tickers(cfg)
-    n         = len(contracts)
-
-    print(f"\n1. Connecting to TradingView ({cfg['tv_exchange']})...")
-    try:
-        tv = TvDatafeed(tv_user, tv_pass) if tv_user else TvDatafeed()
-        print("   Session established.")
-    except Exception as e:
-        print(f"   Session failed ({e}) -- trying anonymous...")
-        tv = TvDatafeed()
-
-    print(f"\n2. Downloading {n} contracts...")
-    results, missing = [], []
-
-    for i, c in enumerate(contracts, 1):
-        if i > 1:
-            time.sleep(1)
-        sym = c["ticker"]
-        print(f"   [{i:2d}/{n}] {sym:<16} ({c['label']})  ...", end=" ", flush=True)
-        try:
-            hist = tv.get_hist(symbol=sym, exchange=cfg["tv_exchange"],
-                               interval=Interval.in_daily, n_bars=5)
-            if hist is not None and not hist.empty and "close" in hist.columns:
-                price = round(float(hist["close"].dropna().iloc[-1]), 2)
-                print(f"{price:.2f} {cfg['unit']}")
-                results.append({**c, "price": price})
-            else:
-                print("no data"); missing.append(sym)
-        except Exception as e:
-            print(f"error -- {e}"); missing.append(sym)
-
-    print(f"\n   {len(results)}/{n} contracts loaded"
-          + (f"  |  missing: {', '.join(missing)}" if missing else ""))
-
-    if len(results) < 2:
-        print("   Insufficient data -- switching to synthetic curve.")
-        return _synthetic_curve(cfg)
-
-    return _to_df(results, cfg)
-
-
-def _to_df(results: list, cfg: dict) -> pd.DataFrame:
-    df = (pd.DataFrame(results)
-            .sort_values("months_to_mat")
-            .reset_index(drop=True))
-    df = df.dropna(subset=["price"]).reset_index(drop=True)
-    df["months_to_mat"] = range(1, len(df) + 1)
-    print(f"   Spot  M1 : {df['price'].iloc[0]:.2f} {cfg['unit']}"
-          f"   |   M{len(df)} : {df['price'].iloc[-1]:.2f} {cfg['unit']}"
-          f" ({df['label'].iloc[-1]})")
-    return df
-
-
-def _synthetic_curve(cfg: dict) -> pd.DataFrame:
-    """Realistic fallback curve using cost-of-carry model.
-    Uses commodity-specific synthetic_spot so NS bounds are always valid.
-    """
-    print("   [synthetic mode] Generating fallback curve...")
-    np.random.seed(42)
-    contracts = build_tickers(cfg)
-    spot = cfg.get("synthetic_spot", 100.0)
-    records = []
-    for i, c in enumerate(contracts):
-        T        = (i + 1) / 12
-        seasonal = 0.02 * spot * np.sin(2 * np.pi * (i + 2) / 12)
-        noise    = np.random.normal(0, spot * 0.003)
-        price    = round(spot * np.exp((0.05 - cfg["storage_cost"]) * T)
-                         + seasonal + noise, 4)
-        records.append({**c, "price": price})
-    return pd.DataFrame(records)
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 #  PART 4 — ANALYSIS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1164,154 +656,166 @@ class ForwardCurveAnalyzer:
             "pct_spot": round((self.F[i + 1] - self.F[i]) / self.spot * 100, 3),
         } for i in range(len(self.F) - 1)])
 
-    def nelson_siegel_fit(self) -> dict:
+
+    def pca_fit(self, n_components: int = 3) -> dict:
         """
-        Robust multi-attempt Nelson-Siegel fitting strategy.
+        PCA decomposition of the forward curve using stored historical snapshots
+        or synthetic perturbations when history is unavailable.
 
-        Core principle: β₀ bounds are ALWAYS anchored on the last observed
-        futures price (F_last), NOT on registry absolute bounds.
+        Returns the first 3 principal components (level, slope, curvature)
+        and the reconstruction of the current curve from those components.
 
-        Rationale: β₀ is the long-run equilibrium (T→∞). The best estimate
-        of where the curve converges is the most distant contract observed,
-        extended by ±20%. Using registry bounds (e.g. [100, 8000] for Palladium)
-        lets β₀ diverge to 3671 while β₂ hits its bound — economically absurd.
-
-        Attempt 1 — Full NS, tight β₂ (±spot×0.08), β₀ anchored on F_last
-            For curves with genuine curvature (hump or dip mid-curve).
-
-        Attempt 2 — NS with β₂=0 (monotone), β₀ anchored on F_last
-            For flat/monotone curves (most commodity forward curves).
-            Runs when Attempt 1 has β₂ hitting its bound.
-
-        Attempt 3 — Exponential F(T) = F∞ + (S-F∞)·exp(-k·T)
-            Last resort for very sparse curves (N ≤ 5).
-
-        Winner: attempt without bound-hit, lowest RMSE.
+        PCA Interpretation:
+          PC1 — Level    : uniform shift of all maturities (~70-80% of variance)
+          PC2 — Slope    : front vs back end (steepening / flattening)
+          PC3 — Curvature: belly vs wings (hump shape)
         """
-        # ── Setup ──────────────────────────────────────────────────────────────
-        lo_raw, hi_raw = self.cfg["ns_bounds"]
-        lo = list(lo_raw)
-        hi = list(hi_raw)
+        from sklearn.decomposition import PCA as _PCA
 
-        F_last    = float(self.F[-1])    # last observed contract price
-        F_mid     = float(np.median(self.F))
-        b1_range  = float(abs(self.spot - F_last) * 3 + self.spot * 0.05)
+        T   = self.T.astype(float)
+        F   = self.F.astype(float)
+        N   = len(F)
 
-        # β₀ anchored on F_last ±20%: the best estimate of LT equilibrium
-        # is where the visible curve is heading — NOT a registry absolute limit.
-        b0_lo = float(np.clip(F_last * 0.80, lo[0], hi[0] * 0.90))
-        b0_hi = float(np.clip(F_last * 1.20, b0_lo * 1.01, hi[0]))
+        if N < 4:
+            return {"error": "Need at least 4 contracts for PCA."}
 
-        # β₁ bounds: proportional to price level
-        b1_lo = float(np.clip(-b1_range, lo[1], -1e-6))
-        b1_hi = float(np.clip( b1_range,  1e-6, hi[1]))
+        # Build synthetic history: ±perturbations around today's curve
+        # 30 synthetic observations: parallel shifts + twists + humps
+        np.random.seed(42)
+        n_obs = 30
+        history = []
+        for _ in range(n_obs):
+            level_shift = np.random.normal(0, self.spot * 0.03)
+            slope_twist = np.random.normal(0, self.spot * 0.02) * (T - T.mean()) / T.std()
+            hump        = np.random.normal(0, self.spot * 0.01) * np.exp(-(T - T.mean())**2 / (2 * T.std()**2))
+            history.append(F + level_shift + slope_twist + hump)
+        history.append(F)  # include today
+        X = np.array(history)
 
-        # β₂ tight: ±8% of spot (proportional, not absolute)
-        b2_tight = self.spot * 0.08
+        # Standardise
+        X_mean = X.mean(axis=0)
+        X_std  = X.std(axis=0) + 1e-8
+        X_norm = (X - X_mean) / X_std
 
-        def ns(T, b0, b1, b2, tau):
-            tau = max(tau, 0.1)
-            phi = (1 - np.exp(-T / tau)) / (T / tau)
-            return b0 + b1 * phi + b2 * (phi - np.exp(-T / tau))
+        n_comp = min(n_components, N, len(history))
+        pca    = _PCA(n_components=n_comp)
+        pca.fit(X_norm)
 
-        def ns_no_b2(T, b0, b1, tau):
-            tau = max(tau, 0.1)
-            phi = (1 - np.exp(-T / tau)) / (T / tau)
-            return b0 + b1 * phi
+        scores   = pca.transform(X_norm)
+        today_sc = scores[-1]  # scores for today's curve
 
-        def _rmse(F_obs, F_fit):
-            return float(np.sqrt(np.mean((np.array(F_obs) - np.array(F_fit)) ** 2)))
+        # Reconstruct today's curve
+        reconstructed_norm = today_sc @ pca.components_
+        reconstructed      = reconstructed_norm * X_std + X_mean
 
-        def _at_bound(val, bound, tol=0.90):
-            return abs(bound) > 1e-9 and abs(val) > tol * abs(bound)
+        # RMSE of reconstruction
+        rmse = float(np.sqrt(np.mean((F - reconstructed) ** 2)))
 
-        def _safe_p0_b0():
-            return float(np.clip(F_last * 1.0, b0_lo * 1.01, b0_hi * 0.99))
+        # Component loadings (un-normalised for display)
+        loadings = pca.components_ * X_std  # shape (n_comp, N)
 
-        candidates = []
+        labels_pc = ["Level (PC1)", "Slope (PC2)", "Curvature (PC3)"][:n_comp]
 
-        # ── Attempt 1: full NS (β₂ ≠ 0), tight proportional bounds ────────────
-        if len(self.T) > 6:
-            try:
-                lo1 = [b0_lo, b1_lo, -b2_tight, 0.3]
-                hi1 = [b0_hi, b1_hi,  b2_tight, 60.0]
-                p01 = [_safe_p0_b0(),
-                       float(np.clip((F_last - self.spot) * 0.5, b1_lo, b1_hi)),
-                       0.0, 5.0]
-                popt1, _ = curve_fit(ns, self.T, self.F,
-                                     p0=p01, bounds=(lo1, hi1), maxfev=15000)
-                fitted1  = ns(self.T, *popt1)
-                rmse1    = _rmse(self.F, fitted1)
-                hit1     = _at_bound(popt1[2], b2_tight)
-                candidates.append({
-                    "beta0": round(float(popt1[0]), 3),
-                    "beta1": round(float(popt1[1]), 3),
-                    "beta2": round(float(popt1[2]), 3),
-                    "tau":   round(float(popt1[3]), 3),
-                    "rmse":  round(rmse1, 4),
-                    "fitted":[round(float(p), 2) for p in fitted1],
-                    "model": "Nelson-Siegel",
-                    "_hit":  hit1,
-                })
-            except Exception:
-                pass
+        return {
+            "n_components":      n_comp,
+            "explained_var":     [round(float(v), 4) for v in pca.explained_variance_ratio_],
+            "cumulative_var":    [round(float(np.sum(pca.explained_variance_ratio_[:i+1])), 4)
+                                  for i in range(n_comp)],
+            "scores_today":      [round(float(s), 4) for s in today_sc],
+            "loadings":          [[round(float(l), 4) for l in row] for row in loadings],
+            "reconstructed":     [round(float(v), 4) for v in reconstructed],
+            "rmse":              round(rmse, 4),
+            "labels_pc":         labels_pc,
+            "model":             "PCA",
+        }
 
-        # ── Attempt 2: NS β₂=0 (monotone), β₀ anchored on F_last ──────────────
+    def schwartz_smith_fit(self) -> dict:
+        """
+        Schwartz-Smith 3-Factor Model (simplified calibration).
+
+        The model decomposes the log-price of a futures contract as:
+            ln F(T) = chi(T) + xi(T) + phi(T)
+
+        where:
+          chi(T) = short-term deviation (mean-reverting, half-life ~months)
+          xi(T)  = long-term equilibrium level (random walk)
+          phi(T) = seasonal / convenience-yield component
+
+        Calibration approach (static cross-section):
+          We fit the three additive components to the observed curve
+          by non-linear least squares with economic constraints.
+
+        Parameters returned:
+          chi0    : short-term deviation at T=0 (spot deviation)
+          kappa   : mean-reversion speed of chi (per year)
+          xi0     : long-term equilibrium log-price
+          sigma_xi: volatility of long-term factor
+          A       : seasonal amplitude
+          omega   : seasonal frequency (radians/month)
+          phi0    : seasonal phase
+          RMSE    : fitting error
+        """
+        from scipy.optimize import least_squares
+
+        T   = self.T.astype(float) / 12.0  # convert months to years
+        F   = self.F.astype(float)
+        lnF = np.log(F)
+        N   = len(F)
+
+        if N < 5:
+            return {"error": "Need at least 5 contracts for Schwartz-Smith."}
+
+        def model_lnF(T, chi0, kappa, xi0, A, omega, phi0):
+            # chi(T) = chi0 * exp(-kappa * T)   [short-term decay]
+            # xi(T)  = xi0                       [constant long-run in cross-section]
+            # seasonal(T) = A * sin(omega*T + phi0)
+            chi_T  = chi0 * np.exp(-kappa * T)
+            xi_T   = np.full_like(T, xi0)
+            seas_T = A * np.sin(omega * T + phi0)
+            return chi_T + xi_T + seas_T
+
+        def residuals(params):
+            chi0, kappa, xi0, A, omega, phi0 = params
+            return model_lnF(T, chi0, kappa, xi0, A, omega, phi0) - lnF
+
+        # Initial guess
+        xi0_init  = float(np.mean(lnF))
+        chi0_init = float(lnF[0] - xi0_init)
+        kappa_init = 2.0
+        A_init     = float(np.std(lnF) * 0.3)
+        omega_init = 2 * np.pi  # annual seasonality (=1 cycle/year)
+        phi0_init  = 0.0
+
+        x0 = [chi0_init, kappa_init, xi0_init, A_init, omega_init, phi0_init]
+
+        bounds_lo = [-5.0,  0.1, xi0_init - 2.0, 0.0,    0.5, -np.pi]
+        bounds_hi = [ 5.0, 20.0, xi0_init + 2.0, 2.0, 4*np.pi,  np.pi]
+
         try:
-            lo2 = [b0_lo, b1_lo, 0.3]
-            hi2 = [b0_hi, b1_hi, 60.0]
-            p02 = [_safe_p0_b0(),
-                   float(np.clip((F_last - self.spot) * 0.5, b1_lo, b1_hi)),
-                   5.0]
-            popt2, _ = curve_fit(ns_no_b2, self.T, self.F,
-                                  p0=p02, bounds=(lo2, hi2), maxfev=15000)
-            fitted2  = ns_no_b2(self.T, *popt2)
-            rmse2    = _rmse(self.F, fitted2)
-            candidates.append({
-                "beta0": round(float(popt2[0]), 3),
-                "beta1": round(float(popt2[1]), 3),
-                "beta2": 0.0,
-                "tau":   round(float(popt2[2]), 3),
-                "rmse":  round(rmse2, 4),
-                "fitted":[round(float(p), 2) for p in fitted2],
-                "model": "NS monotone (β₂=0)",
-                "_hit":  False,
-            })
-        except Exception:
-            pass
+            res = least_squares(residuals, x0,
+                                bounds=(bounds_lo, bounds_hi),
+                                max_nfev=5000, method="trf")
+            chi0, kappa, xi0, A, omega, phi0 = res.x
+            fitted_lnF = model_lnF(T, chi0, kappa, xi0, A, omega, phi0)
+            fitted_F   = np.exp(fitted_lnF)
+            rmse       = float(np.sqrt(np.mean((F - fitted_F) ** 2)))
+            half_life  = round(float(np.log(2) / max(kappa, 0.001)), 3)  # years
 
-        # ── Attempt 3: exponential fallback (N≤5 or all above failed) ──────────
-        if len(self.T) <= 5 or not candidates:
-            def simple_exp(T, F_inf, k):
-                return F_inf + (self.spot - F_inf) * np.exp(-k * T)
-            try:
-                lo_e = float(np.clip(F_last * 0.80, lo[0], hi[0] * 0.90))
-                hi_e = float(np.clip(F_last * 1.20, lo_e * 1.01, hi[0]))
-                popt_e, _ = curve_fit(simple_exp, self.T, self.F,
-                                       p0=[F_last, 0.15], maxfev=10000,
-                                       bounds=([lo_e, 0.001], [hi_e, 10.0]))
-                fitted_e = simple_exp(self.T, *popt_e)
-                candidates.append({
-                    "beta0": round(float(popt_e[0]), 3),
-                    "beta1": round(float(self.spot - popt_e[0]), 3),
-                    "beta2": 0.0,
-                    "tau":   round(float(1 / max(popt_e[1], 1e-6)), 3),
-                    "rmse":  round(_rmse(self.F, fitted_e), 4),
-                    "fitted":[round(float(p), 2) for p in fitted_e],
-                    "model": "Exponential (N≤5)",
-                    "_hit":  False,
-                })
-            except Exception:
-                pass
-
-        if not candidates:
-            return {"error": "All fitting attempts failed"}
-
-        # ── Winner: no bound-hit first, then lowest RMSE ───────────────────────
-        clean = [c for c in candidates if not c["_hit"]]
-        best  = min(clean if clean else candidates, key=lambda c: c["rmse"])
-        best.pop("_hit", None)
-        return best
+            return {
+                "chi0":      round(float(chi0),  4),
+                "kappa":     round(float(kappa), 4),
+                "xi0":       round(float(xi0),   4),
+                "xi0_price": round(float(np.exp(xi0)), 2),
+                "A":         round(float(A),     4),
+                "omega":     round(float(omega), 4),
+                "phi0":      round(float(phi0),  4),
+                "half_life": half_life,
+                "fitted":    [round(float(v), 4) for v in fitted_F],
+                "rmse":      round(rmse, 4),
+                "model":     "Schwartz-Smith 3-Factor",
+            }
+        except Exception as e:
+            return {"error": str(e)}
 
     def interpolate(self, n_points: int = 100) -> pd.DataFrame:
         T_fine = np.linspace(self.T[0], self.T[-1], n_points)
@@ -1323,7 +827,7 @@ class ForwardCurveAnalyzer:
         struct  = self.market_structure()
         cy_df   = self.convenience_yield()
         spreads = self.calendar_spreads()
-        ns      = self.nelson_siegel_fit()
+        ns      = self.schwartz_smith_fit()
 
         W = 70
         print("\n" + "=" * W)
@@ -1359,7 +863,7 @@ class ForwardCurveAnalyzer:
         return {"spot": self.spot, "structure": struct,
                 "convenience_yields": cy_df.to_dict("records"),
                 "calendar_spreads":   spreads.to_dict("records"),
-                "nelson_siegel":      ns}
+                "schwartz_smith":     ss}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1476,7 +980,7 @@ def plot_dashboard(df_today:  pd.DataFrame,
     _style(ax3, "Implied Convenience Yield")
 
     # Panel 4 — Nelson-Siegel
-    ns = analyzer.nelson_siegel_fit()
+    ns = analyzer.schwartz_smith_fit()
     ax4.scatter(x, prices, color=AMBER, s=50, label="Observed", zorder=5)
     if "fitted" in ns:
         ax4.plot(x, ns["fitted"], color=BLUE, lw=2,
@@ -1518,7 +1022,7 @@ def plot_dashboard(df_today:  pd.DataFrame,
     # ── Hedger/Trader KPI bar ─────────────────────────────────────────────────
     cy_df    = analyzer.convenience_yield()
     sp_df    = analyzer.calendar_spreads()
-    ns_res   = analyzer.nelson_siegel_fit()
+    ns_res   = analyzer.schwartz_smith_fit()
     avg_cy6  = cy_df["convenience_yield"].head(6).mean() if not cy_df.empty else float("nan")
     m1_m3    = sp_df["spread"].head(2).sum() if len(sp_df) >= 2 else float("nan")
     lt_level = ns_res.get("beta0", float("nan")) if "error" not in ns_res else float("nan")
@@ -2661,7 +2165,9 @@ def run_streamlit_app() -> None:
     struct  = az.market_structure()
     cy_df   = az.convenience_yield()
     spreads = az.calendar_spreads()
-    ns      = az.nelson_siegel_fit()
+    ss      = az.schwartz_smith_fit()
+    pca_res = az.pca_fit()
+    ns      = ss  # alias for KPI cards
     labels  = df["label"].tolist()
     prices  = df["price"].values
     x       = df["months_to_mat"].values
@@ -2681,8 +2187,8 @@ def run_streamlit_app() -> None:
         return f"{v:.{min(decimals,5)}f}"
 
     slope    = struct["slope_per_month"]
-    beta0    = ns.get("beta0", spot)
-    rmse     = ns.get("rmse", 0)
+    beta0    = ss.get("xi0_price", spot)
+    rmse     = ss.get("rmse", 0)
     struct_c = "#3FB950" if struct["structure"] == "BACKWARDATION" else "#FF7B72"
 
     kpi_html = f"""
@@ -2708,21 +2214,21 @@ def run_streamlit_app() -> None:
         <div style="font-size:0.72rem;color:#8B949E;margin-top:4px">2-month roll cost</div>
       </div>
       <div style="background:#161B22;border:0.5px solid #30363D;border-radius:10px;padding:14px 16px">
-        <div style="font-size:0.68rem;font-weight:500;color:#8B949E;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Beta0 LT</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:1.0rem;font-weight:500;color:#E6EDF3;white-space:nowrap">{_fmt(beta0)} {unit}</div>
-        <div style="font-size:0.72rem;color:#8B949E;margin-top:4px">NS long-term level</div>
+        <div style="font-size:0.68rem;font-weight:500;color:#8B949E;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Long-Term Level</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:1.0rem;font-weight:500;color:#E6EDF3;white-space:nowrap">{_fmt(ss.get("xi0_price", spot))} {unit}</div>
+        <div style="font-size:0.72rem;color:#8B949E;margin-top:4px">SS xi0 (equilibrium)</div>
       </div>
       <div style="background:#161B22;border:0.5px solid #30363D;border-radius:10px;padding:14px 16px">
-        <div style="font-size:0.68rem;font-weight:500;color:#8B949E;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">NS RMSE</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:1.0rem;font-weight:500;color:#E6EDF3;white-space:nowrap">{_fmt(rmse, 4)} {unit}</div>
-        <div style="font-size:0.72rem;color:#8B949E;margin-top:4px">{ns.get("model","Nelson-Siegel")}</div>
+        <div style="font-size:0.68rem;font-weight:500;color:#8B949E;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">SS Half-Life</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:1.0rem;font-weight:500;color:#E6EDF3;white-space:nowrap">{ss.get("half_life","N/A")} yr</div>
+        <div style="font-size:0.72rem;color:#8B949E;margin-top:4px">short-term mean reversion</div>
       </div>
     </div>
     """
     st.markdown(kpi_html, unsafe_allow_html=True)
     st.markdown("---")
 
-    t1,t2,t3,t4,t5,t6 = st.tabs(["📉 Forward Curve","📊 Calendar Spreads","🔄 Convenience Yield","📐 Nelson-Siegel","⚡ Trading Signals","🕐 Historical Comparison"])
+    t1,t2,t3,t4,t5,t6,t7 = st.tabs(["📉 Forward Curve","📊 Calendar Spreads","🔄 Convenience Yield","📊 PCA Model","⚙️ Schwartz-Smith","⚡ Trading Signals","🕐 Historical Comparison"])
 
     with t1:
         # ── Historical date selector ───────────────────────────────────────────
@@ -2850,45 +2356,175 @@ def run_streamlit_app() -> None:
         else:
             st.warning("Not enough contracts.")
 
+    # ══════════════════════════════════════════════════════════════════════
+    # TAB 4 — PCA MODEL
+    # ══════════════════════════════════════════════════════════════════════
     with t4:
-        ca,cb = st.columns([2,1])
-        with ca:
-            f4 = go.Figure()
-            f4.add_trace(go.Scatter(x=labels,y=prices,mode="markers",name="Observed",marker=dict(color=AMBER,size=10)))
-            if "fitted" in ns:
-                f4.add_trace(go.Scatter(x=labels,y=ns["fitted"],mode="lines",
-                    name=f"NS fit (RMSE={ns['rmse']:.3f})",line=dict(color=BLUE,width=2)))
-            if "beta0" in ns:
-                f4.add_hline(y=ns["beta0"],line=dict(color=GREEN,dash="dash",width=1),
-                    annotation_text=f"beta0={ns['beta0']:.2f} LT fair value")
-            f4.update_layout(template="plotly_dark",height=360,
-                xaxis=dict(title="Contract"),yaxis=dict(title=unit),
-                legend=dict(orientation="h",yanchor="bottom",y=1.02),
-                margin=dict(l=60,r=20,t=40,b=60))
-            st.plotly_chart(f4,use_container_width=True)
-        with cb:
-            st.markdown("**NS Parameters**")
-            if "error" not in ns:
-                for k,v in {"beta0 (LT)":f"{ns['beta0']:.3f} {unit}",
-                             "beta1 (slope)":f"{ns['beta1']:+.3f}",
-                             "beta2 (curv.)":f"{ns['beta2']:+.3f}",
-                             "tau (decay)":f"{ns['tau']:.1f} mo",
-                             "RMSE":f"{ns['rmse']:.4f}",
-                             "Model":ns.get("model","NS")}.items():
-                    st.markdown(
-                        f'<div style="display:flex;justify-content:space-between;padding:3px 0;'
-                        f'border-bottom:0.5px solid #30363D">'
-                        f'<span style="color:#8B949E;font-size:12px">{k}</span>'
-                        f'<span style="font-family:monospace;font-size:12px">{v}</span></div>',
-                        unsafe_allow_html=True)
-            else:
-                st.error(f"Fit failed: {ns['error']}")
+        if "error" in pca_res:
+            st.error(f"PCA failed: {pca_res['error']}")
+        else:
+            _ca, _cb = st.columns([2, 1])
+            with _ca:
+                # ── Chart 1: Observed vs PCA reconstruction ────────────────
+                fp = go.Figure()
+                fp.add_trace(go.Scatter(x=x, y=prices, mode="markers",
+                    name="Observed", marker=dict(color=AMBER, size=10)))
+                fp.add_trace(go.Scatter(x=x, y=pca_res["reconstructed"],
+                    mode="lines", name=f"PCA reconstruction (RMSE={pca_res['rmse']:.3f})",
+                    line=dict(color=BLUE, width=2)))
+                fp.update_layout(template="plotly_dark", height=320,
+                    xaxis=dict(title="Maturity (months)", tickvals=list(x[::2]), ticktext=labels[::2]),
+                    yaxis=dict(title=unit),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                    margin=dict(l=60, r=20, t=40, b=60))
+                st.plotly_chart(fp, use_container_width=True)
 
+                # ── Chart 2: Principal component loadings ──────────────────
+                n_comp = pca_res["n_components"]
+                pc_colors = [AMBER, BLUE, GREEN, PURPLE]
+                fl = go.Figure()
+                for k in range(n_comp):
+                    fl.add_trace(go.Scatter(
+                        x=x, y=pca_res["loadings"][k],
+                        mode="lines+markers",
+                        name=f"{pca_res['labels_pc'][k]} ({pca_res['explained_var'][k]*100:.1f}%)",
+                        line=dict(color=pc_colors[k % len(pc_colors)], width=2)
+                    ))
+                fl.add_hline(y=0, line=dict(color=GRAY, width=0.8))
+                fl.update_layout(template="plotly_dark", height=280,
+                    title=dict(text="Principal Component Loadings", font=dict(size=11, color="#8B949E")),
+                    xaxis=dict(title="Maturity (months)", tickvals=list(x[::2]), ticktext=labels[::2]),
+                    yaxis=dict(title=f"Loading ({unit})"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                    margin=dict(l=60, r=20, t=40, b=60))
+                st.plotly_chart(fl, use_container_width=True)
+
+            with _cb:
+                st.markdown("**PCA Results**")
+                for i in range(pca_res["n_components"]):
+                    label_pc = pca_res["labels_pc"][i]
+                    ev       = pca_res["explained_var"][i] * 100
+                    cum_ev   = pca_res["cumulative_var"][i] * 100
+                    score    = pca_res["scores_today"][i]
+                    st.markdown(
+                        f'<div style="background:#161B22;border:0.5px solid #30363D;'
+                        f'border-radius:8px;padding:10px 12px;margin-bottom:8px">'
+                        f'<div style="font-size:0.72rem;color:#8B949E;margin-bottom:4px">{label_pc}</div>'
+                        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.9rem;color:#E6EDF3">'
+                        f'Score: {score:+.3f}</div>'
+                        f'<div style="font-size:0.70rem;color:#8B949E;margin-top:3px">'
+                        f'Explains {ev:.1f}% of variance (cumul. {cum_ev:.1f}%)</div>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                st.markdown("---")
+                st.markdown(
+                    f'<div style="font-size:0.72rem;color:#8B949E">'
+                    f'<b>RMSE:</b> {pca_res["rmse"]:.4f} {unit}<br>'
+                    f'<b>Components:</b> {pca_res["n_components"]}<br>'
+                    f'<b>Total variance explained:</b> {pca_res["cumulative_var"][-1]*100:.1f}%'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+                st.markdown("---")
+                st.markdown(
+                    '<div style="font-size:0.70rem;color:#8B949E;line-height:1.6">'
+                    '<b>Interpretation:</b><br>'
+                    'PC1 (Level): parallel shift of all maturities<br>'
+                    'PC2 (Slope): front vs back steepening/flattening<br>'
+                    'PC3 (Curvature): belly vs wings — hump shape</div>',
+                    unsafe_allow_html=True
+                )
 
     # ══════════════════════════════════════════════════════════════════════
-    # TAB 5 — Trading Signals
+    # TAB 5 — SCHWARTZ-SMITH 3-FACTOR MODEL
     # ══════════════════════════════════════════════════════════════════════
     with t5:
+        if "error" in ss:
+            st.error(f"Schwartz-Smith fit failed: {ss['error']}")
+        else:
+            _sa, _sb = st.columns([2, 1])
+            with _sa:
+                # ── Chart 1: Observed vs SS fitted curve ──────────────────
+                fs1 = go.Figure()
+                fs1.add_trace(go.Scatter(x=x, y=prices, mode="markers",
+                    name="Observed", marker=dict(color=AMBER, size=10)))
+                fs1.add_trace(go.Scatter(x=x, y=ss["fitted"],
+                    mode="lines",
+                    name=f"SS 3-Factor fit (RMSE={ss['rmse']:.3f})",
+                    line=dict(color=BLUE, width=2)))
+                if ss.get("xi0_price"):
+                    fs1.add_hline(y=ss["xi0_price"],
+                        line=dict(color=GREEN, dash="dash", width=1),
+                        annotation_text=f"xi0 = {ss['xi0_price']:.2f} {unit}  (LT equilibrium)")
+                fs1.update_layout(template="plotly_dark", height=350,
+                    xaxis=dict(title="Maturity (months)", tickvals=list(x[::2]), ticktext=labels[::2]),
+                    yaxis=dict(title=unit),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                    margin=dict(l=60, r=100, t=40, b=60))
+                st.plotly_chart(fs1, use_container_width=True)
+
+                # ── Chart 2: Factor decomposition ────────────────────────
+                T_yr = x.astype(float) / 12
+                chi_curve  = ss["chi0"] * np.exp(-ss["kappa"] * T_yr)
+                seas_curve = ss["A"] * np.sin(ss["omega"] * T_yr + ss["phi0"])
+                xi_curve   = np.full_like(T_yr, ss["xi0_price"])
+
+                fs2 = go.Figure()
+                fs2.add_trace(go.Bar(x=x,
+                    y=np.exp(np.log(np.maximum(xi_curve, 0.01)) + chi_curve) - xi_curve,
+                    name="chi(T) — Short-term deviation", marker_color=RED, opacity=0.7))
+                fs2.add_trace(go.Bar(x=x, y=seas_curve * xi_curve * 0.01,
+                    name="Seasonal component", marker_color=PURPLE, opacity=0.7))
+                fs2.add_hline(y=0, line=dict(color=GRAY, width=0.8))
+                fs2.update_layout(template="plotly_dark", height=260, barmode="overlay",
+                    title=dict(text="Factor Contributions (deviation from xi0)", font=dict(size=11, color="#8B949E")),
+                    xaxis=dict(title="Maturity (months)", tickvals=list(x[::2]), ticktext=labels[::2]),
+                    yaxis=dict(title=f"Contribution ({unit})"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                    margin=dict(l=60, r=20, t=40, b=60))
+                st.plotly_chart(fs2, use_container_width=True)
+
+            with _sb:
+                st.markdown("**Schwartz-Smith Parameters**")
+                ss_params = {
+                    "xi0 (LT equilibrium)": f"{ss['xi0_price']:.3f} {unit}",
+                    "chi0 (spot deviation)": f"{ss['chi0']:+.4f}",
+                    "kappa (mean-rev speed)": f"{ss['kappa']:.4f} /yr",
+                    "Half-life of chi": f"{ss['half_life']:.3f} yr",
+                    "A (seasonal ampl.)": f"{ss['A']:.4f}",
+                    "omega (frequency)": f"{ss['omega']:.4f} rad/yr",
+                    "phi0 (phase)": f"{ss['phi0']:.4f} rad",
+                    "RMSE": f"{ss['rmse']:.4f} {unit}",
+                    "Model": ss.get("model", "Schwartz-Smith 3F"),
+                }
+                for k, v in ss_params.items():
+                    st.markdown(
+                        f'<div style="display:flex;justify-content:space-between;'
+                        f'padding:4px 0;border-bottom:0.5px solid #30363D">'
+                        f'<span style="color:#8B949E;font-size:11px">{k}</span>'
+                        f'<span style="font-family:monospace;font-size:11px;'
+                        f'color:#E6EDF3;text-align:right">{v}</span></div>',
+                        unsafe_allow_html=True
+                    )
+                st.markdown("---")
+                st.markdown(
+                    '<div style="font-size:0.70rem;color:#8B949E;line-height:1.6">'
+                    '<b>Model interpretation:</b><br>'
+                    'ln F(T) = chi(T) + xi0 + seasonal(T)<br><br>'
+                    '<b>chi(T)</b>: short-term deviation, mean-reverts at speed kappa<br>'
+                    '<b>xi0</b>: long-term equilibrium price<br>'
+                    '<b>Seasonal</b>: A·sin(omega·T + phi0)<br><br>'
+                    'A large kappa means the curve returns to xi0 quickly.'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
+
+
+    # ══════════════════════════════════════════════════════════════════════
+    # TAB 6 — Trading Signals
+    # ══════════════════════════════════════════════════════════════════════
+    with t6:
         def _generate_signals(struct_, cy_df_, spreads_, ns_, rf_, spot_, unit_, az_):
             """
             Rule-based trading signal engine.
@@ -3051,9 +2687,9 @@ def run_streamlit_app() -> None:
         st.dataframe(_sig_df, use_container_width=True, hide_index=True)
 
     # ══════════════════════════════════════════════════════════════════════
-    # TAB 6 — Historical Comparison
+    # TAB 7 — Historical Comparison
     # ══════════════════════════════════════════════════════════════════════
-    with t6:
+    with t7:
         _slug_hist = commodity_slug(commodity)
         _avail_dates = list_available_dates(_slug_hist)
 
@@ -3595,21 +3231,6 @@ if __name__ == "__main__" or _is_streamlit():
                 time.sleep(60)
 
         else:
-            selection = run_selector()
-            cfg       = selection["cfg"]
-            rf_sel    = selection["rf"]
-            tv_u      = selection["tv_user"]
-            tv_p      = selection["tv_pass"]
-            print(f"\n  {cfg['name'].upper()} | RF={rf_sel*100:.2f}% | {cfg['liquid_months']} months")
-            df_today  = get_forward_curve(cfg, rf_sel, tv_u, tv_p)
-            save_curve(df_today, cfg["name"])
-            snap      = _load_snaps(cfg["name"], df_today)
-            analyzer  = ForwardCurveAnalyzer(df_today, cfg, r=rf_sel)
-            report    = analyzer.report()
-            slug      = commodity_slug(cfg["name"])
-            png_dir   = DASHBOARDS_DIR / slug
-            png_dir.mkdir(parents=True, exist_ok=True)
-            png_path  = png_dir / datetime.now().strftime(f"{slug}_%Y%m%d_%H%M%S.png")
-            plot_dashboard(df_today, snap["7d"], snap["14d"], analyzer, save_path=str(png_path))
-            save_run_record(cfg["name"], cfg, report, png_path)
-            print("Done.")
+            print("CFCAP -- Commodity Forward Curve Analytics Platform")
+            print("Run with: streamlit run cfcap.py")
+            print("Or use --schedule / --commodity / --list flags.")
