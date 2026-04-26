@@ -3,7 +3,7 @@
 > A professional-grade commodity forward curve analyzer built in Python.  
 > Covers 65+ commodities across 8 asset classes with live data, quantitative analytics, and an interactive Streamlit dashboard.
 
-[`aeg-cfcap.streamlit.app`](https://aeg-cfcap.streamlit.app/)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://aeg-cfcap.streamlit.app/)
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.32%2B-red?style=flat-square)
@@ -16,58 +16,27 @@
 
 ---
 
+## Live Demo
+
+**[aeg-cfcap.streamlit.app](https://aeg-cfcap.streamlit.app/)**
+
+The app is live and free to use. No installation required.  
+Source code available on request.
+
+---
+
 ## Features
 
 - **65+ commodities** — Energy, Metals, Agriculture, Base Metals, Freight, Carbon & Environmental
 - **Dual data source routing** — Yahoo Finance (grouped download) or TradingView (tvdatafeed)
-- **Nelson-Siegel curve fitting** — robust multi-attempt strategy with spot-anchored bounds
+- **PCA decomposition** — Level, Slope and Curvature principal components with out-of-sample reconstruction
+- **Schwartz-Smith 3-factor model** — short-term deviation, long-term equilibrium and seasonal component
 - **Implied convenience yield & roll yield** — full term structure
 - **Calendar spreads** — M+1−M with backwardation/contango classification
-- **51 trading signals** — across 11 categories (carry, roll yield, spreads, NS fair value, temporal, hedging, arbitrage, risk)
+- **51 trading signals** — across 11 categories (carry, roll yield, spreads, SS fair value, temporal, hedging, arbitrage, risk)
 - **EIA fundamentals** — US crude/gas inventories, production, spot prices (free API key)
 - **Interactive Streamlit dashboard** — Plotly charts, historical date comparison, PNG export
 - **Daily scheduler** — automated batch runs at market open with CSV persistence
-
----
-
-## Installation
-
-```bash
-git clone https://github.com/adamelgbouri/commodity-forward-curve-analytics-platform.git
-cd cfcap
-pip install -r requirements.txt
-```
-
-For TradingView-sourced contracts (Jet CIF NWE, LME metals, TTF Gas, Carbon...):
-```bash
-pip install tradingview-datafeed
-```
-
----
-
-## Usage
-
-```bash
-# Interactive dialog + matplotlib dashboard (PNG export)
-python cfcap.py
-
-# Interactive browser dashboard (Streamlit)
-streamlit run cfcap.py
-
-# Single commodity via CLI
-python cfcap.py --commodity "WTI Crude Oil" --family "Energy" --rf 4.25
-
-# Daily scheduler — runs automatically at 09:15 EST
-python cfcap.py --schedule
-
-# List saved historical snapshots
-python cfcap.py --list
-```
-
-1. Select an asset class and commodity in the dialog
-2. Set the risk-free rate and number of months forward
-3. Click **RUN ANALYSIS**
-4. The dashboard is saved in `data/dashboards/<commodity>/`
 
 ---
 
@@ -78,32 +47,6 @@ python cfcap.py --list
 | Yahoo Finance | WTI, Brent, NG, Gold, Silver, Copper, Grains, Softs... | Free, no credentials |
 | TradingView | Jet CIF NWE, LME metals, TTF, Coal, Carbon, Freight... | Optional credentials |
 | EIA Open Data | US crude/gas inventories, production, spot | Free API key at [`eia.gov/opendata`](https://eia.gov/opendata) |
-
----
-
-## Project Structure
-
-```
-cfcap/
-├── cfcap.py                 # Main application (single-file)
-├── requirements.txt
-├── README.md
-├── .gitignore
-├── LICENSE
-└── docs/
-    ├── Commodity_Forward_Curve_Analytics_Platform.pdf
-    └── Commodity_Forward_Curve_Analytics_Platform.tex
-
-```
-
-Data is generated automatically at runtime and excluded from version control:
-```
-data/                        # auto-created, gitignored
-├── curves/<commodity>/      # daily CSV snapshots
-├── dashboards/<commodity>/  # PNG exports
-├── eia_cache/               # EIA API cache (24h TTL)
-└── logs/                    # scheduler logs
-```
 
 ---
 
@@ -123,19 +66,19 @@ data/                        # auto-created, gitignored
 ---
 
 ## Dependencies
- 
+
 | Library | Purpose |
 |---|---|
-| `numpy` | Numerical computations, Nelson-Siegel fitting |
+| `numpy` | Numerical computations, PCA and Schwartz-Smith fitting |
 | `pandas` | DataFrames, CSV persistence, historical data |
-| `scipy` | Curve fitting (`curve_fit`), spline interpolation |
+| `scipy` | Non-linear least squares (`least_squares`), spline interpolation |
+| `scikit-learn` | PCA decomposition of the forward curve |
 | `matplotlib` | 4-panel PNG dashboard |
 | `requests` | EIA API calls |
 | `yfinance` | Live futures data (Yahoo Finance) |
 | `streamlit` | Interactive browser dashboard |
 | `plotly` | Interactive charts in Streamlit |
 | `schedule` | Daily scheduler automation |
-| `tkinter` | Desktop selection dialog (built-in) |
 
 ---
 
@@ -144,7 +87,7 @@ data/                        # auto-created, gitignored
 - **Convenience Yield** — physical storage, cash-and-carry arbitrage, CY term structure
 - **Roll Yield** — carry analysis, roll cost/gain, net carry
 - **Calendar Spreads** — M1-M2, M1-M3, M1-M6, butterfly, mixed structure
-- **Nelson-Siegel** — fair value mean-reversion, curvature hump/valley, decay speed
+- **Schwartz-Smith** — fair value mean-reversion, half-life of short-term deviation, seasonal amplitude
 - **Structural Regime** — backwardation/contango depth, transitional markets
 - **Temporal** — 7-day momentum, curve twist, parallel shift, price acceleration
 - **Hedger Signals** — producer hedge, consumer hedge, collar strategy
@@ -153,23 +96,26 @@ data/                        # auto-created, gitignored
 - **Summary** — STRONG BUY/SELL when 3+ signals aligned
 
 ---
+
 ## Theory
 
-The forward curve analytics are based on the **Nelson-Siegel (1987)** parametric model:
+The platform implements two quantitative models for forward curve analysis.
 
-$$F(T) = \beta_0 + \beta_1 \cdot \frac{1 - e^{-T/\tau}}{T/\tau} + \beta_2 \cdot \left[\frac{1 - e^{-T/\tau}}{T/\tau} - e^{-T/\tau}\right]$$
+**PCA Decomposition** identifies the three dominant factors of curve movements:
 
-Where:
-- $\beta_0$ — long-term level (fair value as $T \to \infty$)
-- $\beta_1$ — slope (short-term component, $\beta_0 + \beta_1$ = spot level)
-- $\beta_2$ — curvature (medium-term hump or valley)
-- $\tau$ — decay parameter (speed of mean-reversion)
+$$\hat{F}(T) = \bar{F}(T) + \sum_{k=1}^{3} z_k \cdot \mathbf{v}_k(T)$$
+
+Where $z_k$ are today's factor scores and $\mathbf{v}_k$ the principal component loadings. PC1 captures parallel shifts (~75% of variance), PC2 steepening/flattening (~15%), and PC3 curvature (~7%).
+
+**Schwartz-Smith 3-Factor Model** decomposes the log futures price as:
+
+$$\ln F(T) = \chi_0 \cdot e^{-\kappa T} + \xi_0 + A \cdot \sin(\omega T + \phi_0)$$
+
+Where $\chi_0 e^{-\kappa T}$ is the short-term deviation (mean-reverting at speed $\kappa$), $e^{\xi_0}$ the long-term equilibrium price, and $A \sin(\omega T + \phi_0)$ a seasonal component.
 
 The **implied convenience yield** is derived from the cost-of-carry model:
 
 $$cy(T) = r + u - \frac{1}{T} \ln\left(\frac{F(T)}{S}\right)$$
-
-Where $r$ is the risk-free rate, $u$ the storage cost, $S$ the spot price and $F(T)$ the $T$-maturity futures price.
 
 The **roll yield** measures the annualised return from rolling a long futures position:
 
@@ -178,6 +124,7 @@ $$ry(T) = \frac{S - F(T)}{F(T) \cdot T}$$
 See [`docs/Commodity_Forward_Curve_Analytics_Platform.pdf`](docs/Commodity_Forward_Curve_Analytics_Platform.pdf) for the full mathematical write-up.
 
 ---
+
 ## License
 
 MIT — © 2026 Adam El Gbouri
