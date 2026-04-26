@@ -599,6 +599,180 @@ COMMODITY_REGISTRY = {
 #  PART 1 — SELECTION DIALOG
 # ══════════════════════════════════════════════════════════════════════════════
 
+
+def build_tickers(cfg: dict) -> list[dict]:
+    """
+    Generate contract metadata for the next n months,
+    restricted to the commodity's active month codes.
+    """
+    now       = datetime.now()
+    n         = cfg["liquid_months"]
+    active    = cfg["active_months"]
+    contracts = []
+
+    month_offset = 0
+    while len(contracts) < n:
+        m    = (now.month - 1 + month_offset) % 12
+        year = now.year + (now.month - 1 + month_offset) // 12
+        month_offset += 1
+
+        if MONTH_CODES[m] not in active:
+            continue
+
+        yr2 = str(year)[-2:]
+        if cfg["source"] == "yahoo":
+            ticker = cfg["yf_fmt"].replace("{M}", MONTH_CODES[m]).replace("{YY}", yr2)
+        else:
+            ticker = f"{cfg['tv_prefix']}{MONTH_CODES[m]}{year}"
+
+        contracts.append({
+            "ticker":        ticker,
+            "label":         f"{MONTH_NAMES[m]}-{year}",
+            "month_code":    MONTH_CODES[m],
+            "maturity":      datetime(year, m + 1, 20),
+            "months_to_mat": len(contracts) + 1,
+        })
+
+    return contracts
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PART 3 — DATA DOWNLOAD
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_forward_curve(cfg: dict, rf: float,
+                      tv_user: str = "", tv_pass: str = "") -> pd.DataFrame:
+    """Route download to Yahoo Finance or TradingView based on cfg['source']."""
+    if cfg["source"] == "yahoo":
+        return _download_yahoo(cfg)
+    else:
+        return _download_tradingview(cfg, tv_user, tv_pass)
+
+
+def _download_yahoo(cfg: dict) -> pd.DataFrame:
+    """Single grouped yf.download() — avoids rate limiting."""
+    try:
+        import yfinance as yf
+    except ImportError:
+        print("  yfinance not installed -- pip install yfinance")
+        return _synthetic_curve(cfg)
+
+    contracts = build_tickers(cfg)
+    tickers   = [c["ticker"] for c in contracts]
+    n         = len(tickers)
+
+    print(f"\n1. Downloading {n} contracts from Yahoo Finance...")
+    print(f"   {tickers[0]}  ->  {tickers[-1]}")
+    time.sleep(3)
+
+    raw = yf.download(tickers, period="5d", auto_adjust=True, progress=False)
+
+    if raw.empty:
+        print("   No data received -- switching to synthetic curve.")
+        return _synthetic_curve(cfg)
+
+    closes = (raw["Close"] if isinstance(raw.columns, pd.MultiIndex)
+              else raw[["Close"]]).iloc[-1]
+
+    results, missing = [], []
+    for c in contracts:
+        t = c["ticker"]
+        if t in closes.index and pd.notna(closes[t]):
+            results.append({**c, "price": round(float(closes[t]), 2)})
+            print(f"   {t:<16} {c['label']:<12}  {closes[t]:.2f} {cfg['unit']}")
+        else:
+            missing.append(t)
+
+    print(f"\n   {len(results)}/{n} contracts loaded"
+          + (f"  |  missing: {', '.join(missing)}" if missing else ""))
+
+    if len(results) < 2:
+        print("   Insufficient data -- switching to synthetic curve.")
+        return _synthetic_curve(cfg)
+
+    return _to_df(results, cfg)
+
+
+def _download_tradingview(cfg: dict, tv_user: str, tv_pass: str) -> pd.DataFrame:
+    """Per-contract tv.get_hist() with 1s sleep between calls."""
+    try:
+        from tvdatafeed import TvDatafeed, Interval
+    except ImportError:
+        print("  tvdatafeed not installed.")
+        print("  Run: pip install git+https://github.com/StreamAlpha/tvdatafeed.git")
+        return _synthetic_curve(cfg)
+
+    contracts = build_tickers(cfg)
+    n         = len(contracts)
+
+    print(f"\n1. Connecting to TradingView ({cfg['tv_exchange']})...")
+    try:
+        tv = TvDatafeed(tv_user, tv_pass) if tv_user else TvDatafeed()
+        print("   Session established.")
+    except Exception as e:
+        print(f"   Session failed ({e}) -- trying anonymous...")
+        tv = TvDatafeed()
+
+    print(f"\n2. Downloading {n} contracts...")
+    results, missing = [], []
+
+    for i, c in enumerate(contracts, 1):
+        if i > 1:
+            time.sleep(1)
+        sym = c["ticker"]
+        print(f"   [{i:2d}/{n}] {sym:<16} ({c['label']})  ...", end=" ", flush=True)
+        try:
+            hist = tv.get_hist(symbol=sym, exchange=cfg["tv_exchange"],
+                               interval=Interval.in_daily, n_bars=5)
+            if hist is not None and not hist.empty and "close" in hist.columns:
+                price = round(float(hist["close"].dropna().iloc[-1]), 2)
+                print(f"{price:.2f} {cfg['unit']}")
+                results.append({**c, "price": price})
+            else:
+                print("no data"); missing.append(sym)
+        except Exception as e:
+            print(f"error -- {e}"); missing.append(sym)
+
+    print(f"\n   {len(results)}/{n} contracts loaded"
+          + (f"  |  missing: {', '.join(missing)}" if missing else ""))
+
+    if len(results) < 2:
+        print("   Insufficient data -- switching to synthetic curve.")
+        return _synthetic_curve(cfg)
+
+    return _to_df(results, cfg)
+
+
+def _to_df(results: list, cfg: dict) -> pd.DataFrame:
+    df = (pd.DataFrame(results)
+            .sort_values("months_to_mat")
+            .reset_index(drop=True))
+    df = df.dropna(subset=["price"]).reset_index(drop=True)
+    df["months_to_mat"] = range(1, len(df) + 1)
+    print(f"   Spot  M1 : {df['price'].iloc[0]:.2f} {cfg['unit']}"
+          f"   |   M{len(df)} : {df['price'].iloc[-1]:.2f} {cfg['unit']}"
+          f" ({df['label'].iloc[-1]})")
+    return df
+
+
+def _synthetic_curve(cfg: dict) -> pd.DataFrame:
+    """Realistic fallback curve using cost-of-carry model.
+    Uses commodity-specific synthetic_spot so NS bounds are always valid.
+    """
+    print("   [synthetic mode] Generating fallback curve...")
+    np.random.seed(42)
+    contracts = build_tickers(cfg)
+    spot = cfg.get("synthetic_spot", 100.0)
+    records = []
+    for i, c in enumerate(contracts):
+        T        = (i + 1) / 12
+        seasonal = 0.02 * spot * np.sin(2 * np.pi * (i + 2) / 12)
+        noise    = np.random.normal(0, spot * 0.003)
+        price    = round(spot * np.exp((0.05 - cfg["storage_cost"]) * T)
+                         + seasonal + noise, 4)
+        records.append({**c, "price": price})
+    return pd.DataFrame(records)
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  PART 4 — ANALYSIS
 # ══════════════════════════════════════════════════════════════════════════════
