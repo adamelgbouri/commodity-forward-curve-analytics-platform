@@ -856,33 +856,40 @@ class ForwardCurveAnalyzer:
         # Build synthetic history: ±perturbations around today's curve
         # 30 synthetic observations: parallel shifts + twists + humps
         np.random.seed(42)
-        n_obs = 30
+        n_obs = 50
+        # Build synthetic history WITHOUT today's curve
+        # (training set must not include the observation we evaluate on)
         history = []
         for _ in range(n_obs):
             level_shift = np.random.normal(0, self.spot * 0.03)
             slope_twist = np.random.normal(0, self.spot * 0.02) * (T - T.mean()) / T.std()
             hump        = np.random.normal(0, self.spot * 0.01) * np.exp(-(T - T.mean())**2 / (2 * T.std()**2))
-            history.append(F + level_shift + slope_twist + hump)
-        history.append(F)  # include today
-        X = np.array(history)
+            # Small idiosyncratic noise per contract so the matrix is not
+            # exactly rank-3 — gives a meaningful non-zero RMSE on reconstruction
+            micro = np.random.normal(0, self.spot * 0.002, len(T))
+            history.append(F + level_shift + slope_twist + hump + micro)
+        # Do NOT include today in the training set
+        X_train = np.array(history)
 
-        # Standardise
-        X_mean = X.mean(axis=0)
-        X_std  = X.std(axis=0) + 1e-8
-        X_norm = (X - X_mean) / X_std
+        # Standardise using training set statistics only
+        X_mean = X_train.mean(axis=0)
+        X_std  = X_train.std(axis=0) + 1e-8
+        X_norm = (X_train - X_mean) / X_std
 
         n_comp = min(n_components, N, len(history))
         pca    = _PCA(n_components=n_comp)
         pca.fit(X_norm)
 
-        scores   = pca.transform(X_norm)
-        today_sc = scores[-1]  # scores for today's curve
+        # Project today's curve onto the PCA space using training stats
+        today_norm = (F - X_mean) / X_std
+        today_sc   = pca.transform(today_norm.reshape(1, -1))[0]
 
-        # Reconstruct today's curve
+        # Reconstruct today's curve from PCA components
         reconstructed_norm = today_sc @ pca.components_
         reconstructed      = reconstructed_norm * X_std + X_mean
 
-        # RMSE of reconstruction
+        # RMSE: distance between real observed prices and PCA reconstruction
+        # This is now an honest out-of-sample reconstruction error
         rmse = float(np.sqrt(np.mean((F - reconstructed) ** 2)))
 
         # Component loadings (un-normalised for display)
