@@ -2409,7 +2409,7 @@ def run_streamlit_app() -> None:
     st.markdown(kpi_html, unsafe_allow_html=True)
     st.markdown("---")
 
-    t1,t2,t3,t4,t5,t6,t7 = st.tabs(["📉 Forward Curve","📊 Calendar Spreads","🔄 Convenience Yield","📊 PCA Model","⚙️ Schwartz-Smith","⚡ Trading Signals","🕐 Historical Comparison"])
+    t1,t2,t3,t4,t5,t6,t7 = st.tabs(["📉 Forward Curve","📊 Calendar Spreads","🔄 Convenience Yield","📐 PCA Model","⚙️ Schwartz-Smith","⚡ Trading Signals","🕐 Historical Comparison"])
 
     with t1:
         # ── Historical date selector ───────────────────────────────────────────
