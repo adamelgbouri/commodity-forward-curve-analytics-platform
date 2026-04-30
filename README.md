@@ -10,7 +10,7 @@
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
 
-![CFCAP Screenshot 1](docs/CFCAP_1.gif)
+![demo](docs/CFCAP_1.gif)
 ![CFCAP Screenshot 2](docs/CFCAP_2.gif)
 
 ![Dashboard example](docs/wti_crude_oil_20260408_192720.png)
