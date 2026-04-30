@@ -9,7 +9,7 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.32%2B-red?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-![CFCAP Screenshot 1](docs/Streamlit_Screenshot_CFCAP_1.png)
+![Demo](https://jumpshare.com/share/hutVqw4cf7fjrBshksP4)
 ![CFCAP Screenshot 2](docs/Streamlit_Screenshot_CFCAP_2.png)
 
 ![Dashboard example](docs/wti_crude_oil_20260408_192720.png)
