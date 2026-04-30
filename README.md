@@ -9,7 +9,9 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.32%2B-red?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-![Demo]([https://jumpshare.com/share/hutVqw4cf7fjrBshksP4](https://cdn.jumpshare.com/preview/lhto4wHumtinIA14nTn6gDZY3pX2prhBsIe3lsZbMO9_Vq2P029b039-wvUhORY-YHEARKGx57Ka-A7_3F_RrNkz-5aFvQMZaD6mivHqN6g))
+
+![demo](https://cdn.jumpshare.com/preview/lhto4wHumtinIA14nTn6gDZY3pX2prhBsIe3lsZbMO9_Vq2P029b039-wvUhORY-YHEARKGx57Ka-A7_3F_RrNkz-5aFvQMZaD6mivHqN6g)
+``
 ![CFCAP Screenshot 2](docs/Streamlit_Screenshot_CFCAP_2.png)
 
 ![Dashboard example](docs/wti_crude_oil_20260408_192720.png)
